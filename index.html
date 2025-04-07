@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8">
+  <title>Καταγραφή Μετρήσεων Υγείας</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
+    input, button { margin: 5px; padding: 8px; font-size: 16px; }
+    table, th, td { border: 1px solid #ccc; border-collapse: collapse; padding: 5px; }
+    canvas { max-width: 100%; margin-top: 20px; background: #fff; }
+    th { background-color: #ddd; }
+  </style>
+</head>
+<body>
+  <h2>Καταγραφή Μετρήσεων Υγείας</h2>
+
+  <label>Ημερομηνία: <input type="date" id="date"></label><br>
+  <label>Βάρος (kg): <input type="number" id="weight" step="0.1"></label><br>
+  <label>Νερό (%): <input type="number" id="water" step="0.1"></label><br>
+  <label>Λίπος (%): <input type="number" id="fat" step="0.1"></label><br>
+  <button onclick="addEntry()">Καταγραφή</button>
+  <button onclick="exportToCSV()">Εξαγωγή σε Excel (CSV)</button>
+
+  <h3>Ιστορικό Μετρήσεων</h3>
+  <table id="dataTable">
+    <thead>
+      <tr><th>Ημερομηνία</th><th>Βάρος</th><th>Νερό</th><th>Λίπος</th><th>Ενέργειες</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <canvas id="chartCanvas" height="200"></canvas>
+  <button onclick="downloadChart()">Αποθήκευση Διαγράμματος</button>
+  <button onclick="shareChart()">Κοινοποίηση μέσω Email</button>
+
+  <script>
+    let entries = JSON.parse(localStorage.getItem("healthData") || "[]");
+
+    function saveData() {
+      localStorage.setItem("healthData", JSON.stringify(entries));
+      renderTable();
+      drawChart();
+    }
+
+    function addEntry() {
+      const date = document.getElementById("date").value;
+      const weight = parseFloat(document.getElementById("weight").value);
+      const water = parseFloat(document.getElementById("water").value);
+      const fat = parseFloat(document.getElementById("fat").value);
+      if (!date || isNaN(weight)) return alert("Συμπλήρωσε τουλάχιστον ημερομηνία και βάρος");
+
+      entries.push({ date, weight, water, fat });
+      saveData();
+      document.getElementById("date").value = '';
+      document.getElementById("weight").value = '';
+      document.getElementById("water").value = '';
+      document.getElementById("fat").value = '';
+    }
+
+    function renderTable() {
+      const tbody = document.querySelector("#dataTable tbody");
+      tbody.innerHTML = "";
+      entries.forEach((entry, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><input type="date" value="${entry.date}" onchange="editEntry(${index}, 'date', this.value)"></td>
+          <td><input type="number" value="${entry.weight}" onchange="editEntry(${index}, 'weight', this.value)"></td>
+          <td><input type="number" value="${entry.water}" onchange="editEntry(${index}, 'water', this.value)"></td>
+          <td><input type="number" value="${entry.fat}" onchange="editEntry(${index}, 'fat', this.value)"></td>
+          <td><button onclick="deleteEntry(${index})">Διαγραφή</button></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function editEntry(index, field, value) {
+      entries[index][field] = field === "date" ? value : parseFloat(value);
+      saveData();
+    }
+
+    function deleteEntry(index) {
+      if (confirm("Θέλεις σίγουρα να διαγράψεις τη μέτρηση;")) {
+        entries.splice(index, 1);
+        saveData();
+      }
+    }
+
+    function exportToCSV() {
+      let csv = "Ημερομηνία,Βάρος,Νερό,Λίπος\n";
+      entries.forEach(e => {
+        csv += `${e.date},${e.weight},${e.water},${e.fat}\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "μετρήσεις.csv";
+      link.click();
+    }
+
+    function drawChart() {
+      const ctx = document.getElementById("chartCanvas").getContext("2d");
+      if (window.myChart) window.myChart.destroy();
+
+      const labels = entries.map(e => e.date);
+      const weightData = entries.map(e => e.weight);
+      const waterData = entries.map(e => e.water);
+      const fatData = entries.map(e => e.fat);
+
+      window.myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Βάρος (kg)', data: weightData, borderColor: 'blue', fill: false },
+            { label: 'Νερό (%)', data: waterData, borderColor: 'green', fill: false },
+            { label: 'Λίπος (%)', data: fatData, borderColor: 'red', fill: false },
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom' } }
+        }
+      });
+    }
+
+    function downloadChart() {
+      const link = document.createElement('a');
+      link.download = 'diagramma.png';
+      link.href = document.getElementById("chartCanvas").toDataURL();
+      link.click();
+    }
+
+    function shareChart() {
+      const canvas = document.getElementById("chartCanvas");
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const email = "";
+        const subject = encodeURIComponent("Διάγραμμα Μετρήσεων");
+        const body = encodeURIComponent("Σου επισυνάπτω το διάγραμμα των μετρήσεων.\nΜπορείς να το κατεβάσεις από το παρακάτω link:\n" + url);
+        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+        alert("Το διάγραμμα είναι έτοιμο! Θα ανοίξει νέο email, επισυνάψτε το αρχείο από το παρακάτω link.");
+      }, "image/png");
+    }
+
+    // Αρχικό φορτίο
+    saveData();
+  </script>
+</body>
+</html>
